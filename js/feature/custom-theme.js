@@ -8,6 +8,26 @@ const palette = require('../render/palette');
 let scratch = null;  // 720×720 裁剪工作画布
 let sampler = null;  // 16×16 取样画布
 
+const B64_TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** ArrayBuffer → base64（纯 JS 实现，不依赖 wx.arrayBufferToBase64 / btoa） */
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  const out = [];
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const has1 = i + 1 < bytes.length;
+    const has2 = i + 2 < bytes.length;
+    const b1 = has1 ? bytes[i + 1] : 0;
+    const b2 = has2 ? bytes[i + 2] : 0;
+    out.push(B64_TABLE[b0 >> 2]);
+    out.push(B64_TABLE[(b0 & 3) << 4 | b1 >> 4]);
+    out.push(has1 ? B64_TABLE[(b1 & 15) << 2 | b2 >> 6] : '=');
+    out.push(has2 ? B64_TABLE[b2 & 63] : '=');
+  }
+  return out.join('');
+}
+
 function ensureScratch() {
   if (!scratch) {
     const cv = wx.createCanvas();
@@ -83,6 +103,17 @@ function persistBase64(base64) {
   }
 }
 
+/** 生成图片文件的 base64 备份（读文件 → 编码，不依赖画布 API，全平台可用） */
+function makeFileBackup(path) {
+  try {
+    const data = wx.getFileSystemManager().readFileSync(path);
+    const b64 = arrayBufferToBase64(data);
+    return b64 || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 /** 从裁剪工作画布取样并派生主题配色 */
 function deriveFromScratch(sc) {
   const sp = ensureSampler();
@@ -134,4 +165,4 @@ function deriveFromImagePath(path, callback) {
   img.src = path;
 }
 
-module.exports = { ensureScratch, persistTemp, persistBase64, deriveFromScratch, buildFromDraft, deriveFromImagePath };
+module.exports = { ensureScratch, persistTemp, persistBase64, makeFileBackup, deriveFromScratch, buildFromDraft, deriveFromImagePath };

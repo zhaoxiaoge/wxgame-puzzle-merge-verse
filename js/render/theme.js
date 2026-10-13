@@ -267,6 +267,7 @@ function removeCustom(id) {
   const t = customList.find(function (x) { return x.id === id; });
   customList = customList.filter(function (x) { return x.id !== id; });
   storage.saveThemes(customList);
+  storage.clearBackups(id); // 同步清除低清备份
   // 同步清理主题相关数据：按主题战绩 + 进行中棋局
   const save = storage.loadSave();
   let dirty = false;
@@ -332,24 +333,43 @@ function getTileImage(theme, value) {
 function validateCustoms() {
   if (!customList.length) return;
   const fs = wx.getFileSystemManager();
-  // 只校验引用了背景图片文件的主题；文件丢失时仅清除引用（主题降级为无背景继续可用），不再删除主题
-  const withImage = customList.filter(function (t) { return !!t.image; });
-  if (!withImage.length) return;
-  let pending = withImage.length;
+  // 校验所有图片引用（背景图 + 方块图）：
+  // 文件在 → 跳过；文件丢但有 storage 低清备份 → 自动恢复文件（自愈）；
+  // 无备份 → 降级（背景清引用，方块清引用回退标准牌面）
+  const refs = [];
+  for (const t of customList) {
+    if (t.image) refs.push({ t: t, key: 'bg', path: t.image });
+    if (t.images) {
+      for (const k in t.images) {
+        if (t.images[k]) refs.push({ t: t, key: k, path: t.images[k] });
+      }
+    }
+  }
+  if (!refs.length) return;
+  let pending = refs.length;
   const broken = [];
-  withImage.forEach(function (t) {
+  refs.forEach(function (r) {
     fs.access({
-      path: t.image,
+      path: r.path,
       success: function () { check(); },
-      fail: function () { broken.push(t.id); check(); }
+      fail: function () { broken.push(r); check(); }
     });
   });
   function check() {
     if (--pending > 0) return;
     if (!broken.length) return;
-    customList.forEach(function (t) {
-      if (broken.indexOf(t.id) >= 0) t.image = '';
-    });
+    // 恢复写入前确保目录存在（极端清理可能连目录一起删）
+    try { fs.mkdirSync(wx.env.USER_DATA_PATH + '/themes', true); } catch (e0) { /* 已存在 */ }
+    for (let i = 0; i < broken.length; i++) {
+      const r = broken[i];
+      const b64 = storage.getBackup(r.t.id, r.key);
+      if (b64) {
+        try { fs.writeFileSync(r.path, b64, 'base64'); continue; } catch (e) { /* 恢复失败走降级 */ }
+      }
+      // 无备份/恢复失败：降级
+      if (r.key === 'bg') r.t.image = '';
+      else if (r.t.images) delete r.t.images[r.key];
+    }
     storage.saveThemes(customList);
   }
 }

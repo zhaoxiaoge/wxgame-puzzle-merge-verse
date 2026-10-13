@@ -74,6 +74,46 @@ function clearAll() {
   try { wx.removeStorageSync(KEY_THEMES); } catch (e) { /* ignore */ }
 }
 
+/* ---------- 自定义主题图片的低清备份（对抗管家类"按文件年龄清理"） ---------- */
+
+const BK_PREFIX = 'bk_';
+
+/** 保存某主题某槽位的低清图片备份（base64） */
+function saveBackup(themeId, key, base64) {
+  try { wx.setStorageSync(BK_PREFIX + themeId + '_' + key, base64); } catch (e) { /* 存储满等：忽略，缺失时走降级 */ }
+}
+
+/** 读取某主题某槽位的低清备份（无则返回 null） */
+function getBackup(themeId, key) {
+  try { return wx.getStorageSync(BK_PREFIX + themeId + '_' + key) || null; } catch (e) { return null; }
+}
+
+/** 清除某主题的全部备份键 */
+function clearBackups(themeId) {
+  try {
+    const prefix = BK_PREFIX + themeId + '_';
+    const keys = (wx.getStorageInfoSync().keys || []);
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].indexOf(prefix) === 0) { try { wx.removeStorageSync(keys[i]); } catch (e) { /* ignore */ } }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+/** 载入某主题的全部备份：{ key: base64 } */
+function loadBackups(themeId) {
+  const out = {};
+  try {
+    const prefix = BK_PREFIX + themeId + '_';
+    const keys = (wx.getStorageInfoSync().keys || []);
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].indexOf(prefix) === 0) {
+        try { out[keys[i].slice(prefix.length)] = wx.getStorageSync(keys[i]); } catch (e) { /* ignore */ }
+      }
+    }
+  } catch (e) { /* ignore */ }
+  return out;
+}
+
 /** 本地日期字符串（YYYY-MM-DD），offsetDays 为负表示昨天 */
 function dateStr(offsetDays) {
   const d = new Date(Date.now() + (offsetDays || 0) * 86400000);
@@ -88,4 +128,4 @@ function cnDate(offsetDays) {
   return (d.getMonth() + 1) + '月' + d.getDate() + '日';
 }
 
-module.exports = { loadSave, saveSave, loadSettings, saveSettings, loadThemes, saveThemes, clearAll, dateStr, cnDate };
+module.exports = { loadSave, saveSave, loadSettings, saveSettings, loadThemes, saveThemes, clearAll, saveBackup, getBackup, clearBackups, loadBackups, dateStr, cnDate };

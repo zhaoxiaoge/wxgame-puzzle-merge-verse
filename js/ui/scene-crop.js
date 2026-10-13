@@ -252,7 +252,13 @@ class CropScene {
     let saved = customTheme.persistTemp(path);
     if (!saved) saved = this.persistFromScratch(); // 模拟器兜底：临时路径不可复制时直接写 base64
     if (!saved) { this.busy = false; wx.showToast({ title: '保存失败，请重试', icon: 'none' }); return; }
-    this.app.themeDraft = this.app.themeDraft || { images: {}, words: {}, image: '', name: '', colorBase: 'auto' };
+    this.app.themeDraft = this.app.themeDraft || { images: {}, words: {}, image: '', name: '', colorBase: 'auto', imgBackups: {} };
+    // 图片备份入草稿：保存主题时写入 storage（对抗管家类文件清理，丢失可自动恢复）
+    const imgB64 = customTheme.makeFileBackup(saved.path);
+    if (imgB64) {
+      this.app.themeDraft.imgBackups = this.app.themeDraft.imgBackups || {};
+      this.app.themeDraft.imgBackups[String(this.editorSlot)] = imgB64;
+    }
     const fs = wx.getFileSystemManager();
     if (this.editorSlot === 'bg') {
       const old = this.app.themeDraft.image;

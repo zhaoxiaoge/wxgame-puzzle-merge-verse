@@ -43,12 +43,13 @@ class ThemeEditorScene {
         words: Object.assign({}, t.words || {}),
         image: t.image || '',
         name: t.name || '',
-        colorBase: t.colorBase || 'auto'
+        colorBase: t.colorBase || 'auto',
+        imgBackups: storage.loadBackups(this.editId)
       };
       this.app.themeDraft = this.draft;
     } else {
       // 新建：草稿挂 app.themeDraft（裁剪页往返写入，名称也存草稿防丢失）
-      this.draft = { sessionKind: this.kind, sessionEditId: null, images: {}, words: {}, image: '', name: '', colorBase: 'auto' };
+      this.draft = { sessionKind: this.kind, sessionEditId: null, images: {}, words: {}, image: '', name: '', colorBase: 'auto', imgBackups: {} };
       this.app.themeDraft = this.draft;
     }
     this.app.themeDraft = this.draft;
@@ -291,6 +292,7 @@ class ThemeEditorScene {
       if (this.draft.image) {
         const clr = this.bgClearRect();
         if (R.hit(clr, x, y)) {
+          if (this.draft.imgBackups) delete this.draft.imgBackups.bg; // 备份同步清除
           this.draft.image = '';
           return;
         }
@@ -431,6 +433,12 @@ class ThemeEditorScene {
     if (this.editId) themeMgr.updateCustom(this.editId, obj);
     else themeMgr.addCustom(obj);
     themeMgr.setCurrent(obj.id);
+    // 低清备份入账 storage：清旧写新（文件被管家类清理丢失时，启动可自动恢复）
+    storage.clearBackups(obj.id);
+    const imgs = this.draft.imgBackups || {};
+    for (const k in imgs) {
+      if (imgs[k]) storage.saveBackup(obj.id, k, imgs[k]);
+    }
     this.app.themeDraft = null;
     this.app.themeEdit = null;
     wx.showToast({ title: '已保存并应用', icon: 'none' });
